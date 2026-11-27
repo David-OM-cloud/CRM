@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Моя CRM — платежи и лицензии</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: #f2f4f8;
+  color: #1e2430;
+}
+
+.app { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+
+.header h1 { margin: 0 0 12px; font-size: 26px; }
+
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.stat {
+  background: #fff; border: 1px solid #e1e5ec; border-radius: 8px;
+  padding: 6px 12px; font-size: 14px;
+}
+.stat.warn b { color: #b7791f; }
+.stat.bad b { color: #c53030; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 18px; }
+.search { flex: 1; min-width: 200px; }
+
+input, select {
+  padding: 8px 10px; border: 1px solid #cbd2dc; border-radius: 8px;
+  font-size: 14px; background: #fff; color: inherit;
+}
+input:focus, select:focus { outline: 2px solid #4c7dd0; border-color: transparent; }
+
+.btn {
+  padding: 8px 14px; border: 1px solid #cbd2dc; border-radius: 8px;
+  background: #fff; cursor: pointer; font-size: 14px;
+}
+.btn:hover { background: #eef1f6; }
+.btn.primary { background: #3b6fc9; border-color: #3b6fc9; color: #fff; }
+.btn.primary:hover { background: #335fae; }
+.btn.small { padding: 4px 8px; font-size: 13px; }
+.btn.danger:hover { background: #fdecec; }
+.filebtn { position: relative; overflow: hidden; display: inline-block; }
+.filebtn input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+.form {
+  background: #fff; border: 1px solid #e1e5ec; border-radius: 12px;
+  padding: 18px 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(20,30,50,.06);
+}
+.form.hidden { display: none; }
+.form h2 { margin: 0 0 14px; font-size: 18px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; color: #455061; }
+.grid label.wide { grid-column: 1 / -1; }
+.grid small { font-weight: 400; color: #8a94a3; }
+.form-actions { margin-top: 16px; display: flex; gap: 10px; }
+
+.table-wrap { overflow-x: auto; background: #fff; border: 1px solid #e1e5ec; border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 980px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #edf0f4; vertical-align: top; }
+th { background: #f7f9fc; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; color: #5b6675; position: sticky; top: 0; }
+tbody tr:hover { background: #f8fafd; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td.strong { font-weight: 600; }
+td.empty { text-align: center; color: #8a94a3; padding: 28px; }
+td.actions { white-space: nowrap; text-align: right; }
+.hint { display: block; color: #8a94a3; font-weight: 400; }
+td.warn { color: #b7791f; font-weight: 600; }
+td.bad { color: #c53030; font-weight: 600; }
+
+.status { border-radius: 999px; padding: 4px 10px; font-size: 13px; border: 1px solid transparent; cursor: pointer; }
+.status-paid { background: #e6f6ea; color: #22703a; border-color: #bfe5ca; }
+.status-pending { background: #fdf4e3; color: #96660e; border-color: #f2ddb0; }
+.status-overdue { background: #fdeaea; color: #a02525; border-color: #f3c4c4; }
+
+.footer { margin-top: 18px; font-size: 13px; color: #7a8494; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.io { display: flex; gap: 10px; }
+
+@media (max-width: 700px) {
+  .header h1 { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <h1>💼 Моя CRM — платежи и лицензии</h1>
+    <div class="stats" id="stats"></div>
+    <div class="toolbar">
+      <button class="btn primary" id="btnAdd">+ Добавить запись</button>
+      <input class="search" id="search" placeholder="Поиск по контрагенту / описанию…" />
+      <select id="sortKey">
+        <option value="nextPayment">Сортировка: по дате платежа</option>
+        <option value="contractor">Сортировка: по контрагенту</option>
+        <option value="endDate">Сортировка: по дате окончания</option>
+      </select>
+    </div>
+  </header>
+
+  <form class="form hidden" id="form">
+    <h2 id="formTitle">Новая запись</h2>
+    <div class="grid">
+      <label>Контрагент *
+        <input id="f-contractor" placeholder="ООО «Ромашка», сервис и т.п." required />
+      </label>
+      <label class="wide">Описание
+        <input id="f-description" placeholder="Лицензия ПО, хостинг, подписка…" />
+      </label>
+      <label>Периодичность
+        <select id="f-period"></select>
+      </label>
+      <label>Дата начала
+        <input type="date" id="f-startDate" />
+      </label>
+      <label>Дата окончания <small>(автоматически)</small>
+        <input type="date" id="f-endDate" />
+      </label>
+      <label>Сумма платежа
+        <input type="number" min="0" step="0.01" id="f-amount" placeholder="0" />
+      </label>
+      <label>Статус оплаты
+        <select id="f-paymentStatus"></select>
+      </label>
+      <label>Есть ли в бюджете?
+        <select id="f-inBudget">
+          <option value="yes">Да</option>
+          <option value="no">Нет</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn primary" id="btnSave">Добавить</button>
+      <button type="button" class="btn" id="btnCancel">Отмена</button>
+    </div>
+  </form>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Контрагент</th>
+          <th>Описание</th>
+          <th>Дата начала</th>
+          <th>Дата окончания</th>
+          <th>Предстоящий платёж</th>
+          <th>Статус оплаты</th>
+          <th>Периодичность</th>
+          <th class="num">Сумма</th>
+          <th>В бюджете</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer class="footer">
+    Данные хранятся локально в вашем браузере (localStorage). Экспорт/импорт CSV доступен ниже.
+    <div class="io">
+      <button class="btn" id="btnExport">⬇ Экспорт CSV</button>
+      <label class="btn filebtn">
+        ⬆ Импорт CSV
+        <input type="file" id="fileImport" accept=".csv,text/csv" />
+      </label>
+    </div>
+  </footer>
+</div>
+
+<script>
+'use strict';
+
+// ================= ДАННЫЕ =================
+const PERIODS = [
+  { value: 'none', label: 'Без периода' },
+  { value: 'once', label: 'Разово' },
+  { value: 'week', label: 'Еженедельно' },
+  { value: '2weeks', label: 'Раз в 2 недели' },
+  { value: 'month', label: 'Ежемесячно' },
+  { value: 'quarter', label: 'Ежеквартально' },
+  { value: 'halfyear', label: 'Раз в полгода' },
+  { value: 'year', label: 'Ежегодно' },
+];
+
+const PAYMENT_STATUSES = [
+  { value: 'paid', label: 'Оплачено' },
+  { value: 'pending', label: 'Ожидает оплаты' },
+  { value: 'overdue', label: 'Просрочено' },
+];
+
+const STORAGE_KEY = 'crm-items-v1';
+
+let items = loadItems();
+let editingId = null;
+
+function loadItems() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function saveItems() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// ================= УТИЛИТЫ ДАТ =================
+function addMonths(date, months) {
+  const d = new Date(date.getTime());
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, lastDay));
+  return d;
+}
+
+function addPeriod(date, period) {
+  if (!date || !period || period === 'none' || period === 'once') return null;
+  const d = new Date(date.getTime());
+  switch (period) {
+    case 'week': d.setDate(d.getDate() + 7); return d;
+    case '2weeks': d.setDate(d.getDate() + 14); return d;
+    case 'month': return addMonths(d, 1);
+    case 'quarter': return addMonths(d, 3);
+    case 'halfyear': return addMonths(d, 6);
+    case 'year': return addMonths(d, 12);
+    default: return null;
+  }
+}
+
+// Автопересчёт даты окончания по дате начала и периодичности
+function computeEndDate(startDateStr, period) {
+  if (!startDateStr || period === 'none') return '';
+  const end = addPeriod(parseDate(startDateStr), period);
+  return end ? toISODate(end) : '';
+}
+
+// Предстоящая дата платежа: ближайшая дата >= сегодня с шагом периодичности
+function computeNextPayment(item) {
+  const { startDate, endDate, period } = item;
+  if (!period || period === 'none' || period === 'once') {
+    return endDate || startDate || '';
+  }
+  const base = parseDate(startDate || endDate);
+  if (!base) return '';
+  const today = startOfDay(new Date());
+  let next = new Date(base.getTime());
+  for (let i = 0; i < 5000 && next < today; i++) {
+    const nn = addPeriod(next, period);
+    if (!nn) break;
+    next = nn;
+  }
+  return toISODate(next);
+}
+
+function parseDate(str) {
+  if (!str) return null;
+  const d = new Date(str + 'T00:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+function toISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function startOfDay(d) {
+  const x = new Date(d.getTime());
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function daysUntil(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return null;
+  return Math.round((d - startOfDay(new Date())) / 86400000);
+}
+function fmtDate(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return '—';
+  return d.toLocaleDateString('ru-RU');
+}
+function fmtMoney(n) {
+  if (n === '' || n === null || n === undefined || isNaN(Number(n))) return '—';
+  return Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// ================= DOM =================
+const $ = (id) => document.getElementById(id);
+const form = $('form');
+
+// заполняем селекты
+$('f-period').innerHTML = PERIODS.map((p) => `<option value="${p.value}">${p.label}</option>`).join('');
+$('f-paymentStatus').innerHTML = PAYMENT_STATUSES.map((s) => `<option value="${s.value}">${s.label}</option>`).join('');
+
+function emptyForm() {
+  return { contractor: '', description: '', startDate: '', endDate: '', period: 'month', paymentStatus: 'pending', amount: '', inBudget: 'yes' };
+}
+
+function fillForm(f) {
+  $('f-contractor').value = f.contractor || '';
+  $('f-description').value = f.description || '';
+  $('f-startDate').value = f.startDate || '';
+  $('f-endDate').value = f.endDate || '';
+  $('f-period').value = f.period || 'month';
+  $('f-paymentStatus').value = f.paymentStatus || 'pending';
+  $('f-amount').value = f.amount ?? '';
+  $('f-inBudget').value = f.inBudget || 'yes';
+}
+
+function readForm() {
+  return {
+    contractor: $('f-contractor').value,
+    description: $('f-description').value,
+    startDate: $('f-startDate').value,
+    endDate: $('f-endDate').value,
+    period: $('f-period').value,
+    paymentStatus: $('f-paymentStatus').value,
+    amount: $('f-amount').value,
+    inBudget: $('f-inBudget').value,
+  };
+}
+
+function showForm(title) {
+  $('formTitle').textContent = title;
+  $('btnSave').textContent = editingId ? 'Сохранить' : 'Добавить';
+  form.classList.remove('hidden');
+  $('f-contractor').focus();
+}
+function hideForm() {
+  form.classList.add('hidden');
+  editingId = null;
+  fillForm(emptyForm());
+}
+
+// автопересчёт даты окончания при изменении даты начала / периодичности
+function recalcEnd() {
+  $('f-endDate').value = computeEndDate($('f-startDate').value, $('f-period').value);
+}
+$('f-startDate').addEventListener('change', recalcEnd);
+$('f-period').addEventListener('change', recalcEnd);
+
+$('btnAdd').addEventListener('click', () => {
+  editingId = null;
+  fillForm(emptyForm());
+  showForm('Новая запись');
+});
+$('btnCancel').addEventListener('click', hideForm);
+
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const data = readForm();
+  if (!data.contractor.trim()) return;
+  if (editingId) {
+    const it = items.find((i) => i.id === editingId);
+    if (it) Object.assign(it, data);
+  } else {
+    items.push({ id: uid(), ...data });
+  }
+  saveItems();
+  hideForm();
+  render();
+});
+
+function startEdit(item) {
+  editingId = item.id;
+  fillForm(item);
+  showForm('Редактировать запись');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function removeItem(id) {
+  if (!confirm('Удалить запись?')) return;
+  items = items.filter((i) => i.id !== id);
+  saveItems();
+  render();
+}
+
+function updateStatus(id, value) {
+  const it = items.find((i) => i.id === id);
+  if (it) { it.paymentStatus = value; saveItems(); render(); }
+}
+
+// ================= РЕНДЕР =================
+function getVisible() {
+  const q = $('search').value.trim().toLowerCase();
+  const sortKey = $('sortKey').value;
+  return items
+    .filter((it) => !q || (it.contractor || '').toLowerCase().includes(q) || (it.description || '').toLowerCase().includes(q))
+    .sort((a, b) => {
+      if (sortKey === 'contractor') return (a.contractor || '').localeCompare(b.contractor || '', 'ru');
+      if (sortKey === 'endDate') return (a.endDate || '9999').localeCompare(b.endDate || '9999');
+      return (computeNextPayment(a) || '9999').localeCompare(computeNextPayment(b) || '9999');
+    });
+}
+
+function render() {
+  // статистика
+  const totalAmount = items.filter((i) => i.inBudget === 'yes').reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  const soonCount = items.filter((i) => { const d = daysUntil(computeNextPayment(i)); return d !== null && d >= 0 && d <= 7; }).length;
+  const overdueCount = items.filter((i) => { const d = daysUntil(computeNextPayment(i)); return d !== null && d < 0; }).length;
+  $('stats').innerHTML =
+    `<span class="stat">Записей: <b>${items.length}</b></span>` +
+    `<span class="stat warn">Скоро (7 дней): <b>${soonCount}</b></span>` +
+    `<span class="stat bad">Просрочено: <b>${overdueCount}</b></span>` +
+    `<span class="stat">В бюджете на период: <b>${fmtMoney(totalAmount)}</b></span>`;
+
+  // таблица
+  const visible = getVisible();
+  const tbody = $('tbody');
+  if (visible.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">${
+      items.length === 0 ? 'Записей пока нет — нажмите «Добавить запись».' : 'Ничего не найдено.'
+    }</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = visible.map((it) => {
+    const next = computeNextPayment(it);
+    const d = daysUntil(next);
+    const nextCls = d === null ? '' : d < 0 ? 'bad' : d <= 7 ? 'warn' : '';
+    const periodLabel = (PERIODS.find((p) => p.value === it.period) || {}).label || it.period || '—';
+    const hint = d === null ? '' : d < 0 ? `просрочено ${-d} дн.` : d === 0 ? 'сегодня' : `через ${d} дн.`;
+    const statusOpts = PAYMENT_STATUSES.map((s) =>
+      `<option value="${s.value}" ${s.value === it.paymentStatus ? 'selected' : ''}>${s.label}</option>`).join('');
+    return `<tr>
+      <td class="strong">${esc(it.contractor)}</td>
+      <td>${esc(it.description) || '—'}</td>
+      <td>${fmtDate(it.startDate)}</td>
+      <td>${fmtDate(it.endDate)}</td>
+      <td class="${nextCls}">${fmtDate(next)}${hint ? `<small class="hint">${hint}</small>` : ''}</td>
+      <td><select class="status status-${esc(it.paymentStatus)}" data-status-id="${it.id}">${statusOpts}</select></td>
+      <td>${esc(periodLabel)}</td>
+      <td class="num">${fmtMoney(it.amount)}</td>
+      <td>${it.inBudget === 'yes' ? '✅ Да' : '⛔ Нет'}</td>
+      <td class="actions">
+        <button class="btn small" data-edit-id="${it.id}">✏️</button>
+        <button class="btn small danger" data-del-id="${it.id}">🗑</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('[data-edit-id]').forEach((b) =>
+    b.addEventListener('click', () => startEdit(items.find((i) => i.id === b.dataset.editId))));
+  tbody.querySelectorAll('[data-del-id]').forEach((b) =>
+    b.addEventListener('click', () => removeItem(b.dataset.delId)));
+  tbody.querySelectorAll('[data-status-id]').forEach((s) =>
+    s.addEventListener('change', () => updateStatus(s.dataset.statusId, s.value)));
+}
+
+$('search').addEventListener('input', render);
+$('sortKey').addEventListener('change', render);
+
+// ================= CSV =================
+const CSV_HEADERS = ['contractor', 'description', 'startDate', 'endDate', 'period', 'paymentStatus', 'amount', 'inBudget'];
+
+$('btnExport').addEventListener('click', () => {
+  const escCsv = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+  const rows = [CSV_HEADERS.join(','), ...items.map((i) => CSV_HEADERS.map((h) => escCsv(i[h])).join(','))];
+  const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'crm-export.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+$('fileImport').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const text = String(reader.result).replace(/^\uFEFF/, '');
+    const lines = parseCsv(text);
+    if (lines.length < 2) return;
+    const header = lines[0].map((h) => h.trim());
+    for (let r = 1; r < lines.length; r++) {
+      const obj = {};
+      header.forEach((h, idx) => (obj[h] = lines[r][idx] ?? ''));
+      if (obj.contractor) items.push({ id: uid(), ...emptyForm(), ...obj });
+    }
+    saveItems();
+    render();
+  };
+  reader.readAsText(file, 'utf-8');
+  e.target.value = '';
+});
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQ = false;
+      } else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// старт
+render();
+</script>
+</body>
+</html>
